@@ -15,6 +15,15 @@
 #include <unistd.h>
 #include "util.h"
 
+#define BACKLOG 20
+#define REQSIZE 2047  //size of GET request?
+
+int socket_fd, client_fd;
+struct sockaddr_in server_addr; /* my address */
+struct sockaddr_in client_addr; /* client's address */
+int addr_size;
+int enable = 1;
+
 /**********************************************
  * init
    - port is the number of the port you want the server to be
@@ -26,6 +35,31 @@
    - if init encounters any errors, it will call exit().
 ************************************************/
 void init(int port) {
+  //  Create socket
+  socket_fd = socket(PF_INET, SOCK_STREAM, 0);
+  if(socket_fd == -1){
+    perror("In init(int port): Error creating socket.");
+    exit(1);
+  }
+  //  Bind the socket to a network address
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(port);
+  server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  //  Set the reuse option
+  if( setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(int)) == -1) {
+    perror("In init(int port): Cannot set socket reuse option.");
+    exit(1);
+  }
+  // Bind the socket command
+  if ( bind(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+    perror("In init(int port): Unable to bind.");
+    exit(1);
+  }
+  // Setup a queue to listen to oncoming requests
+  if (  listen(socket_fd, BACKLOG) == -1) {
+    perror("In init(int port): Unable to listen.");
+    exit(1);
+  }
 }
 
 /**********************************************
@@ -36,6 +70,14 @@ void init(int port) {
    - if the return value is negative, the request should be ignored.
 ***********************************************/
 int accept_connection(void) {
+  int connection_fd;
+  addr_size = sizeof(client_addr);
+  connection_fd = accept(socket_fd, (struct sockaddr *)&client_addr, &addr_size);
+  if(connection_fd == -1){
+    perror("In accept_connection(void): Unable to accept connection.")
+    return -1;
+  }
+  return connection_fd;
 }
 
 /**********************************************
