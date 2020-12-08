@@ -16,12 +16,12 @@
 #include "util.h"
 
 #define BACKLOG 20
-#define REQSIZE 2047  //size of GET request?
+#define REQSIZE 2048  //size of GET request, 2048th byte is NULL
 
 int socket_fd, client_fd;
 struct sockaddr_in server_addr; /* my address */
 struct sockaddr_in client_addr; /* client's address */
-int addr_size;
+unsigned int addr_size;
 int enable = 1;
 
 /**********************************************
@@ -38,7 +38,7 @@ void init(int port) {
   //  Create socket
   socket_fd = socket(PF_INET, SOCK_STREAM, 0);
   if(socket_fd == -1){
-    perror("In init(int port): Error creating socket.");
+    perror("In init(): Error creating socket.");
     exit(1);
   }
   //  Bind the socket to a network address
@@ -47,19 +47,20 @@ void init(int port) {
   server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   //  Set the reuse option
   if( setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(int)) == -1) {
-    perror("In init(int port): Cannot set socket reuse option.");
+    perror("In init(): Cannot set socket reuse option.");
     exit(1);
   }
   // Bind the socket command
   if ( bind(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-    perror("In init(int port): Unable to bind.");
+    perror("In init(): Unable to bind.");
     exit(1);
   }
-  // Setup a queue to listen to oncoming requests
+  // Setup a queue to listen to oncoming requests (backlog upto 20 requests in queue)
   if (  listen(socket_fd, BACKLOG) == -1) {
-    perror("In init(int port): Unable to listen.");
+    perror("In init(): Unable to listen.");
     exit(1);
   }
+  return;
 }
 
 /**********************************************
@@ -74,7 +75,7 @@ int accept_connection(void) {
   addr_size = sizeof(client_addr);
   connection_fd = accept(socket_fd, (struct sockaddr *)&client_addr, &addr_size);
   if(connection_fd == -1){
-    perror("In accept_connection(void): Unable to accept connection.")
+    perror("In accept_connection(): Unable to accept connection.");
     return -1;
   }
   return connection_fd;
@@ -96,6 +97,18 @@ int accept_connection(void) {
      specific 'connection'.
 ************************************************/
 int get_request(int fd, char *filename) {
+
+  char reqMsg[REQSIZE];
+  int readSize = 0;
+  readSize = read(fd, reqMsg, REQSIZE-1);
+
+  if(readSize >= 0){
+    reqMsg[readSize] = '\0';  //Null terminate end of message
+    fprintf(stderr, "First line of request: %s \n", reqMsg);
+  }
+  else{
+    perror("In get_request(): Request read problem.");
+  }  return 0;
 }
 
 /**********************************************
@@ -118,6 +131,7 @@ int get_request(int fd, char *filename) {
    - returns 0 on success, nonzero on failure.
 ************************************************/
 int return_result(int fd, char *content_type, char *buf, int numbytes) {
+  return 0;
 }
 
 /**********************************************
@@ -130,4 +144,5 @@ int return_result(int fd, char *content_type, char *buf, int numbytes) {
    - returns 0 on success, nonzero on failure.
 ************************************************/
 int return_error(int fd, char *buf) {
+  return 0;
 }
