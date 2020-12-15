@@ -17,12 +17,27 @@
 
 #define BACKLOG 20
 #define REQSIZE 2048  //size of GET request, 2048th byte is NULL
+#define PATHSIZE 1024 //size of file path in get_request
 
 int socket_fd, client_fd;
 struct sockaddr_in server_addr; /* my address */
 struct sockaddr_in client_addr; /* client's address */
 unsigned int addr_size;
 int enable = 1;
+
+//  find an occurence of .. or // in the path
+int isLegalPath(char *path){
+  int i;
+  int s = strlen(path);
+
+  for(i=1; i<s; i++){
+    if(path[i] == '/' && path[i-1] == '/')
+      return 0;
+    if(path[i] == '.' && path[i-1] == '.')
+      return 0;
+  }
+  return 1;
+}
 
 /**********************************************
  * init
@@ -99,23 +114,49 @@ int accept_connection(void) {
 int get_request(int fd, char *filename) {
 
   char reqMsg[REQSIZE];
+  char reqName[10];       // aka GET
+  char reqPath[PATHSIZE]; // aka file path
+  char reqType[10];       // aka HTTP/1.1
   int readSize = 0;
   readSize = read(fd, reqMsg, REQSIZE-1);
 
-  if(readSize >= 0){
-    reqMsg[readSize] = '\0';  //Null terminate end of message
-    fprintf(stderr, "First line of request: %s \n", reqMsg);
-  }
-  else{
+  if(readSize < 0){
     perror("In get_request(): Request read problem.");
-  }  return 0;
+    return -1;  //if read() returns negative, a read error must have occured
+  }
+  //  This should separate the important info from the request into three char buffers
+  //  These three, in order, should be the first line of the request if printed in its entirety
+  sscanf(reqMsg, "%s %s %s", reqName, reqPath, reqType);
+
+  if(strcmp(reqName,"GET"))   // Not a get request
+    return -1;
+  if(strlen(reqPath) <= 0 || !isLegalPath(reqPath))    // Empty file path case or faulty read from sscanf()
+    return -1;                                          //  Or path contains .. or //
+
+  //  If reach this point, the request contains the two strings as specified
+
+  // Debug print statements
+  // printf("reqMsg: %s \n", reqMsg);
+  // printf("reqName: %s \n", reqName);
+
+  // printf("reqPath: %s \n", reqPath);     --> Most important printf here(?)
+
+  // printf("reqType: %s \n", reqType);
+
+  reqMsg[readSize] = '\0';  //Null terminate end of message
+  reqPath[PATHSIZE-1] = '\0'; // Null terminate file path
+ // fprintf(stderr, "First line of request: %s \n", reqMsg);
+ // fprintf(stderr, "%s \n", reqMsg);
+  strcpy(filename, reqPath);
+
+  return 0;
 }
 
 /**********************************************
  * return_result
    - returns the contents of a file to the requesting client
    - parameters:
-      - fd is the file descriptor obtained by accept_connection()
+      - fd is the file descriptor obtained by accept_connection()     --> Socket descriptor
         to where you wish to return the result of a request
       - content_type is a pointer to a string that indicates the
         type of content being returned. possible types include
@@ -131,6 +172,29 @@ int get_request(int fd, char *filename) {
    - returns 0 on success, nonzero on failure.
 ************************************************/
 int return_result(int fd, char *content_type, char *buf, int numbytes) {
+  char header[100], connectionLine[100];
+  char contentType[strlen(content_type)];     // This...uhhh...works?
+  char contentBuf[strlen(buf)];             // Might need more testing
+  char contentSize[100];     // It's just a line to write the content size
+
+  sprintf(header, "HTTP/1.1 200 OK \n");
+  sprintf(contentType, "Content-Type: %s \n", content_type);
+  sprintf(contentSize, "Content-Length: %d \n", numbytes);
+  sprintf(connectionLine, "Connection: Close \n");
+  // strcpy(contentBuf, buf);
+
+  //  Start seeing server reception from here
+  write(fd, header, strlen(header));
+  write(fd, contentType, strlen(contentType));
+  write(fd, contentSize, strlen(contentSize));
+  write(fd, connectionLine, strlen(connectionLine));
+  // write(fd, "\r\n", 2);
+  // write(fd, " \n", 1);   --> This triggers data transfer?
+  write(fd, buf, numbytes);
+
+  //  Connection closed at byte 0?
+  close(fd);
+
   return 0;
 }
 
