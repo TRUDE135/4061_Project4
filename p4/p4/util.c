@@ -49,7 +49,7 @@ int isLegalPath(char *path){
      BEFORE USING ANY OF THE FUNCTIONS BELOW
    - if init encounters any errors, it will call exit().
 ************************************************/
-void init(int port) {
+void init(int port) { // Creates server
   //  Create socket
   socket_fd = socket(PF_INET, SOCK_STREAM, 0);
   if(socket_fd == -1){
@@ -85,10 +85,15 @@ void init(int port) {
      get_request() instead.
    - if the return value is negative, the request should be ignored.
 ***********************************************/
-int accept_connection(void) {
+int accept_connection(void) { // Connection handle
+
+  // reutrn this file descriptor 
   int connection_fd;
   addr_size = sizeof(client_addr);
+  // accept socket
   connection_fd = accept(socket_fd, (struct sockaddr *)&client_addr, &addr_size);
+
+  // Error check
   if(connection_fd == -1){
     perror("In accept_connection(): Unable to accept connection.");
     return -1;
@@ -111,8 +116,9 @@ int accept_connection(void) {
      must NOT use a return_request or return_error function for that
      specific 'connection'.
 ************************************************/
-int get_request(int fd, char *filename) {
+int get_request(int fd, char *filename) { // Data handle
 
+  // init request data
   char reqMsg[REQSIZE];
   char reqName[10];       // aka GET
   char reqPath[PATHSIZE]; // aka file path
@@ -131,22 +137,12 @@ int get_request(int fd, char *filename) {
   if(strcmp(reqName,"GET"))   // Not a get request
     return -1;
   if(strlen(reqPath) <= 0 || !isLegalPath(reqPath))    // Empty file path case or faulty read from sscanf()
-    return -1;                                          //  Or path contains .. or //
+    return -1;                                         
 
   //  If reach this point, the request contains the two strings as specified
 
-  // Debug print statements
-  // printf("reqMsg: %s \n", reqMsg);
-  // printf("reqName: %s \n", reqName);
-
-  // printf("reqPath: %s \n", reqPath);     --> Most important printf here(?)
-
-  // printf("reqType: %s \n", reqType);
-
   reqMsg[readSize] = '\0';  //Null terminate end of message
   reqPath[PATHSIZE-1] = '\0'; // Null terminate file path
- // fprintf(stderr, "First line of request: %s \n", reqMsg);
- // fprintf(stderr, "%s \n", reqMsg);
   strcpy(filename, reqPath);
 
   return 0;
@@ -171,16 +167,21 @@ int get_request(int fd, char *filename) {
       - numbytes is the number of bytes the file takes up in buf
    - returns 0 on success, nonzero on failure.
 ************************************************/
+// Send data
 int return_result(int fd, char *content_type, char *buf, int numbytes) {
   char header[REQSIZE];
 
+  // This header will be sent to the client giving all useful information
+  // about the server and the requested file (size, connection len, con. typ.)
   int size = sprintf(header, 
       "HTTP/1.1 200 OK\nContent-Type: %s\nContent-Length: %d\nConnection: Close\n\n",
       content_type, numbytes);
 
+  // Writes the data to the client's file descriptor
   write(fd, header, size);
   write(fd, buf, numbytes);
   
+  // Closes the connection 
   if(close(fd) < 0){
     printf("\nSocket didn't close right\n");
     return -1;
@@ -198,16 +199,19 @@ int return_result(int fd, char *content_type, char *buf, int numbytes) {
       - buf is a pointer to the location of the error text
    - returns 0 on success, nonzero on failure.
 ************************************************/
-int return_error(int fd, char *buf) {
+int return_error(int fd, char *buf) { // Send Error(s)
   char header[REQSIZE];
 
+  // Same as header from 'return_request' but with an error code instead.
   int size = sprintf(header, 
-      "HTTP/1.1 404 Not Found\nContent-Type: text/html\nContent-Length: %ld\nConnection: Close\n\n",
+  "HTTP/1.1 404 Not Found\nContent-Type: text/html\nContent-Length: %ld\nConnection: Close\n\n",
       strlen(buf));
       
+  // Writes the msg. and the header to client
   write(fd, header, size);
   write(fd, buf, sizeof(buf));
 
+  // Closes the connection
   if(close(fd) < 0){
     printf("\nSocket didn't close right\n");
     return -1;
